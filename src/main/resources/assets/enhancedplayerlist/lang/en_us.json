@@ -1,5 +1,8 @@
 {
-  "itemGroup.enhancedplayerlist": "Example Mod Tab",
-  "block.enhancedplayerlist.example_block": "Example Block",
-  "item.enhancedplayerlist.example_item": "Example Item"
+  "enhancedplayerlist.config.title": "Enhanced Player List Configuration",
+  "enhancedplayerlist.config.showOfflinePlayers": "Show Offline Players",
+  "enhancedplayerlist.config.grayOutOffline": "Gray Out Offline Players",
+  "enhancedplayerlist.config.updateFrequency": "Update Frequency",
+  "enhancedplayerlist.config.compactMode": "Compact Mode",
+  "enhancedplayerlist.config.visibleStats": "Visible Stats"
 }
