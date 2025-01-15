@@ -1,3 +1,5 @@
+// src/main/java/com/enhancedplayerlist/client/PlayerListRenderer.java
+
 package com.enhancedplayerlist.client;
 
 import com.enhancedplayerlist.Config;

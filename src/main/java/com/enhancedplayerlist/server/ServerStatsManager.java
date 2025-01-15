@@ -1,15 +1,17 @@
+// src/main/java/com/enhancedplayerlist/server/ServerStatsManager.java
 package com.enhancedplayerlist.server;
 
 import com.enhancedplayerlist.Config;
 import com.enhancedplayerlist.data.PlayerStatsData;
+import com.enhancedplayerlist.network.NetworkHandler;
 import com.enhancedplayerlist.network.PlayerStatsPacket;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
-import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.world.level.storage.LevelResource;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.io.File;
 import java.io.FileReader;
@@ -28,7 +30,7 @@ public class ServerStatsManager {
     public static void loadAllPlayerStats() {
         if (server == null) return;
         
-        File statsDir = new File(server.getWorldPath(LevelResource.PLAYER_STATS_DIR).toFile(), "stats");
+        File statsDir = server.getWorldPath(LevelResource.PLAYER_STATS_DIR).toFile();
         if (!statsDir.exists()) return;
 
         File[] statFiles = statsDir.listFiles((dir, name) -> name.endsWith(".json"));
@@ -43,11 +45,9 @@ public class ServerStatsManager {
                 statsData.setUuid(uuid);
                 statsData.loadFromJson(jsonStats);
                 
-                // Set online status
                 ServerPlayer player = server.getPlayerList().getPlayer(UUID.fromString(uuid));
                 statsData.setOnline(player != null);
                 
-                // Get player name from server's user cache
                 Optional.ofNullable(server.getProfileCache())
                     .flatMap(cache -> cache.get(UUID.fromString(uuid)))
                     .ifPresent(profile -> statsData.setPlayerName(profile.getName()));
@@ -62,7 +62,6 @@ public class ServerStatsManager {
     public static void syncToClients() {
         if (server == null) return;
         
-        // Only send stats that should be visible according to config
         Map<UUID, PlayerStatsData> visibleStats = new HashMap<>();
         playerStats.forEach((uuid, stats) -> {
             if (stats.isOnline() || Config.showOfflinePlayers) {
@@ -71,7 +70,7 @@ public class ServerStatsManager {
         });
         
         PlayerStatsPacket packet = new PlayerStatsPacket(visibleStats);
-        PacketDistributor.ALL.noArg().send(packet);
+        NetworkHandler.CHANNEL.send(PacketDistributor.ALL.noArg(), packet);
     }
 
     public static void onPlayerJoin(Player player) {

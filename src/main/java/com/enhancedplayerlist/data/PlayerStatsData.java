@@ -1,3 +1,5 @@
+// src/main/java/com/enhancedplayerlist/data/PlayerStatsData.java
+
 package com.enhancedplayerlist.data;
 
 import com.google.gson.JsonObject;

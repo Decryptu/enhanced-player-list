@@ -1,3 +1,5 @@
+// src/main/java/com/enhancedplayerlist/client/ClientStatsManager.java
+
 package com.enhancedplayerlist.client;
 
 import com.enhancedplayerlist.data.PlayerStatsData;
