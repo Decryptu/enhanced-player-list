@@ -1,45 +1,41 @@
-// src/main/java/com/enhancedplayerlist/client/event/ClientEventHandler.java
 package com.enhancedplayerlist.client.event;
 
 import com.enhancedplayerlist.Config;
-import com.enhancedplayerlist.EnhancedPlayerList;
 import com.enhancedplayerlist.client.PlayerListRenderer;
 import com.enhancedplayerlist.client.ClientStatsManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.PlayerTabOverlay;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.scores.Scoreboard;
-import net.minecraft.world.scores.Objective;
-import net.minecraft.world.scores.DisplaySlot;
-import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.client.event.CustomizeGuiOverlayEvent;
-import net.neoforged.neoforge.client.gui.overlay.IGuiOverlay;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
+import net.neoforged.neoforge.common.NeoForge;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
-@Mod.EventBusSubscriber(modid = EnhancedPlayerList.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ClientEventHandler {
     
     private static final Minecraft minecraft = Minecraft.getInstance();
     private static int lastListWidth = 0;
+
+    public static void init() {
+        NeoForge.EVENT_BUS.register(ClientEventHandler.class);
+    }
     
-    private static final IGuiOverlay PLAYER_LIST_OVERLAY = ((gui, graphics, partialTick, screenWidth, screenHeight) -> {
-        if (!minecraft.isWindowActive() || !minecraft.options.keyPlayerList.isDown()) {
+    @SubscribeEvent
+    public static void onRenderGui(RenderGuiEvent.Post event) {
+        if (minecraft.player == null || !minecraft.isWindowActive() || !minecraft.options.keyPlayerList.isDown()) {
             return;
         }
 
-        // Get scoreboard objective if any
-        Scoreboard scoreboard = minecraft.level.getScoreboard();
-        Objective objective = scoreboard != null ? scoreboard.getDisplayObjective(DisplaySlot.LIST) : null;
-
-        PlayerTabOverlay playerList = minecraft.gui.getTabList();
+        GuiGraphics graphics = event.getGuiGraphics();
+        int screenWidth = minecraft.getWindow().getGuiScaledWidth();
         
-        // Get online players via player connection
-        var players = minecraft.player.connection.getListedOnlinePlayers();
+        var onlinePlayers = minecraft.player.connection;
+        if (onlinePlayers == null) return;
+        
+        var players = onlinePlayers.getListedOnlinePlayers();
 
         // Calculate extra width for stats
         int extraWidth = 0;
@@ -58,14 +54,16 @@ public class ClientEventHandler {
         extraWidth += 20;
         lastListWidth = minecraft.font.width("Player") + extraWidth;
 
+        // Use AtomicInteger for y coordinate to handle lambda effectively final requirement
+        AtomicInteger yPos = new AtomicInteger(10);
+
         // Render player stats
-        int y = 10;
         for (var playerInfo : players) {
             UUID playerId = playerInfo.getProfile().getId();
             List<Component> stats = PlayerListRenderer.getPlayerStats(playerId);
             if (!stats.isEmpty()) {
                 int baseX = screenWidth - extraWidth - 5;
-                int statY = y;
+                int statY = yPos.get();
 
                 for (Component stat : stats) {
                     graphics.drawString(
@@ -78,7 +76,7 @@ public class ClientEventHandler {
                     statY += 9;
                 }
             }
-            y += 9;
+            yPos.addAndGet(9);
         }
 
         // Handle offline players
@@ -88,7 +86,7 @@ public class ClientEventHandler {
                     List<Component> stats = PlayerListRenderer.getPlayerStats(uuid);
                     if (!stats.isEmpty()) {
                         int baseX = screenWidth - extraWidth - 5;
-                        int statY = y;
+                        int statY = yPos.get();
 
                         graphics.drawString(
                             minecraft.font,
@@ -108,15 +106,11 @@ public class ClientEventHandler {
                             );
                             statY += 9;
                         }
-                        y += 9;
+                        yPos.addAndGet(9);
                     }
                 }
             });
         }
-    });
-
-    public static void register() {
-        net.neoforged.neoforge.client.gui.overlay.VanillaGuiOverlay.PLAYER_LIST.insert(PLAYER_LIST_OVERLAY);
     }
 
     public static int getLastListWidth() {
