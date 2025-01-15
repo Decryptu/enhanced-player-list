@@ -1,3 +1,5 @@
+
+// src/main/java/com/enhancedplayerlist/client/event/ClientEventHandler.java
 package com.enhancedplayerlist.client.event;
 
 import com.enhancedplayerlist.Config;
