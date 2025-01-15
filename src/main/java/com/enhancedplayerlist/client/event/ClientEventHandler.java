@@ -2,6 +2,7 @@
 package com.enhancedplayerlist.client.event;
 
 import com.enhancedplayerlist.Config;
+import com.enhancedplayerlist.EnhancedPlayerList;
 import com.enhancedplayerlist.client.PlayerListRenderer;
 import com.enhancedplayerlist.client.ClientStatsManager;
 import net.minecraft.client.Minecraft;
@@ -10,43 +11,40 @@ import net.minecraft.client.gui.components.PlayerTabOverlay;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.Objective;
+import net.minecraft.world.scores.DisplaySlot;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.CustomizeGuiOverlayEvent;
+import net.neoforged.neoforge.client.gui.overlay.IGuiOverlay;
 
 import java.util.List;
 import java.util.UUID;
 
-@Mod.EventBusSubscriber(value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@Mod.EventBusSubscriber(modid = EnhancedPlayerList.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ClientEventHandler {
     
     private static final Minecraft minecraft = Minecraft.getInstance();
     private static int lastListWidth = 0;
-
-    @SubscribeEvent
-    public static void onRenderPlayerList(CustomizeGuiOverlayEvent.PlayerList event) {
-        if (!minecraft.isWindowActive() || minecraft.options.keyPlayerList.isDown()) {
+    
+    private static final IGuiOverlay PLAYER_LIST_OVERLAY = ((gui, graphics, partialTick, screenWidth, screenHeight) -> {
+        if (!minecraft.isWindowActive() || !minecraft.options.keyPlayerList.isDown()) {
             return;
         }
 
-        GuiGraphics graphics = event.getGuiGraphics();
-        int screenWidth = event.getWindow().getGuiScaledWidth();
-        int screenHeight = event.getWindow().getGuiScaledHeight();
-
         // Get scoreboard objective if any
         Scoreboard scoreboard = minecraft.level.getScoreboard();
-        Objective objective = scoreboard != null ? scoreboard.getDisplayObjective(0) : null;
+        Objective objective = scoreboard != null ? scoreboard.getDisplayObjective(DisplaySlot.LIST) : null;
 
-        // Get player list width including stats
         PlayerTabOverlay playerList = minecraft.gui.getTabList();
-        List<UUID> players = event.getPlayerInfo().stream()
-                .map(info -> info.getProfile().getId())
-                .toList();
+        
+        // Get online players via player connection
+        var players = minecraft.player.connection.getListedOnlinePlayers();
 
-        // Calculate extra width needed for stats
+        // Calculate extra width for stats
         int extraWidth = 0;
-        for (UUID playerId : players) {
+        for (var playerInfo : players) {
+            UUID playerId = playerInfo.getProfile().getId();
             List<Component> stats = PlayerListRenderer.getPlayerStats(playerId);
             if (!stats.isEmpty()) {
                 for (Component stat : stats) {
@@ -58,19 +56,17 @@ public class ClientEventHandler {
 
         // Add padding
         extraWidth += 20;
-        
-        // Store the final list width for other renderers
-        lastListWidth = event.getMaxPlayerNameWidth() + extraWidth;
-        
-        // Modify player list entries to include stats
-        int y = 0;
-        for (UUID playerId : players) {
+        lastListWidth = minecraft.font.width("Player") + extraWidth;
+
+        // Render player stats
+        int y = 10;
+        for (var playerInfo : players) {
+            UUID playerId = playerInfo.getProfile().getId();
             List<Component> stats = PlayerListRenderer.getPlayerStats(playerId);
             if (!stats.isEmpty()) {
                 int baseX = screenWidth - extraWidth - 5;
-                int statY = y * 9 + event.getHeaderHeight();
+                int statY = y;
 
-                // Render each stat line
                 for (Component stat : stats) {
                     graphics.drawString(
                         minecraft.font,
@@ -82,19 +78,18 @@ public class ClientEventHandler {
                     statY += 9;
                 }
             }
-            y++;
+            y += 9;
         }
 
-        // Handle offline players if enabled
+        // Handle offline players
         if (Config.showOfflinePlayers) {
             ClientStatsManager.getPlayerStats().forEach((uuid, statsData) -> {
                 if (!statsData.isOnline()) {
                     List<Component> stats = PlayerListRenderer.getPlayerStats(uuid);
                     if (!stats.isEmpty()) {
                         int baseX = screenWidth - extraWidth - 5;
-                        int statY = y * 9 + event.getHeaderHeight();
+                        int statY = y;
 
-                        // Render offline player name
                         graphics.drawString(
                             minecraft.font,
                             Component.literal(statsData.getPlayerName()),
@@ -103,7 +98,6 @@ public class ClientEventHandler {
                             Config.grayOutOffline ? 0x808080 : 0xFFFFFF
                         );
 
-                        // Render offline player stats
                         for (Component stat : stats) {
                             graphics.drawString(
                                 minecraft.font,
@@ -114,14 +108,15 @@ public class ClientEventHandler {
                             );
                             statY += 9;
                         }
-                        y++;
+                        y += 9;
                     }
                 }
             });
         }
+    });
 
-        // Update list height
-        event.setFooterHeight(event.getFooterHeight() + y * 9);
+    public static void register() {
+        net.neoforged.neoforge.client.gui.overlay.VanillaGuiOverlay.PLAYER_LIST.insert(PLAYER_LIST_OVERLAY);
     }
 
     public static int getLastListWidth() {

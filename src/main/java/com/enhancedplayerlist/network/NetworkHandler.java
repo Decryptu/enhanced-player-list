@@ -5,34 +5,33 @@ import com.enhancedplayerlist.EnhancedPlayerList;
 import com.enhancedplayerlist.client.ClientStatsManager;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlerEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
-import net.neoforged.neoforge.network.registration.IPayloadRegistrar;
 
 public class NetworkHandler {
-    public static final ResourceLocation PLAYER_STATS_ID = new ResourceLocation(EnhancedPlayerList.MODID, "player_stats");
+    public static final ResourceLocation PLAYER_STATS_ID = ResourceLocation.fromNamespaceAndPath(EnhancedPlayerList.MODID, "player_stats");
 
     @SubscribeEvent
-    public static void register(RegisterPayloadHandlerEvent event) {
-        IPayloadRegistrar registrar = event.registrar(EnhancedPlayerList.MODID)
+    public static void register(RegisterPayloadHandlersEvent event) {
+        final var registrar = event.registrar(EnhancedPlayerList.MODID)
             .versioned("1.0");
 
-        registrar.play(
+        registrar.playToClient(
             PlayerStatsPacket.TYPE,
-            PlayerStatsPacket::new,
-            handler -> handler.client((packet, context) -> {
-                context.workHandler().execute(() -> {
+            PlayerStatsPacket.STREAM_CODEC,
+            (packet, context) -> {
+                context.enqueueWork(() -> {
                     ClientStatsManager.updatePlayerStats(packet.playerStats());
                 });
-            })
+            }
         );
     }
 
     public static void sendToServer(PlayerStatsPacket packet) {
-        PacketDistributor.SERVER.noArg().send(packet);
+        PacketDistributor.sendToServer(packet);
     }
 
     public static void sendToAllPlayers(PlayerStatsPacket packet) {
-        PacketDistributor.ALL.noArg().send(packet);
+        PacketDistributor.sendToAllPlayers(packet);
     }
 }

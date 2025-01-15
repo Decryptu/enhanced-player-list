@@ -1,13 +1,9 @@
 // src/main/java/com/enhancedplayerlist/Config.java
 package com.enhancedplayerlist;
 
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.ModConfigSpec;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.ModLoadingContext;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
 
@@ -25,28 +21,29 @@ public class Config {
            .comment("Whether to gray out offline players in the player list")
            .define("grayOutOffline", true);
 
-   private static final ModConfigSpec.ConfigValue<List<? extends String>> VISIBLE_STATS = BUILDER
-           .comment("Stats to display in the player list",
-                   "Available stats:",
-                   "playtime - Total play time",
-                   "deaths - Number of deaths",
-                   "lastDeath - Time since last death",
-                   "mobKills - Total mob kills", 
-                   "playerKills - Player kills",
-                   "blocksWalked - Blocks walked",
-                   "blocksMined - Blocks mined",
-                   "jumps - Jump count",
-                   "damageDealt - Damage dealt",
-                   "damageTaken - Damage taken")
-           .defineList("visibleStats", 
-               Arrays.asList(
-                   "playtime",
-                   "deaths",
-                   "lastDeath",
-                   "mobKills",
-                   "blocksWalked"
-               ),
-               entry -> entry instanceof String && isValidStat((String) entry));
+private static final ModConfigSpec.ConfigValue<List<? extends String>> VISIBLE_STATS = BUILDER
+       .comment("Stats to display in the player list",
+               "Available stats:",
+               "playtime - Total play time",
+               "deaths - Number of deaths",
+               "lastDeath - Time since last death", 
+               "mobKills - Total mob kills",
+               "playerKills - Player kills",
+               "blocksWalked - Blocks walked", 
+               "blocksMined - Blocks mined",
+               "jumps - Jump count",
+               "damageDealt - Damage dealt",
+               "damageTaken - Damage taken")
+       .defineList("visibleStats",
+           Arrays.asList(
+               "playtime",
+               "deaths", 
+               "lastDeath",
+               "mobKills",
+               "blocksWalked"
+           ),
+           () -> "playtime", // Supplier for new elements
+           entry -> entry instanceof String && isValidStat((String) entry));
 
    private static final ModConfigSpec.IntValue UPDATE_FREQUENCY = BUILDER
            .comment("How often to update player stats (in ticks, 20 ticks = 1 second)")
@@ -80,14 +77,14 @@ public class Config {
        ).contains(stat);
    }
 
-   public static void register(IEventBus modEventBus) {
-       // Register the config
-       ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, SPEC);
-       
-       // Register the event handler
-       modEventBus.addListener(Config::onConfigLoad);
-       modEventBus.addListener(Config::onConfigReload);
-   }
+public static void register(IEventBus modEventBus, ModContainer container) { // Change method signature
+    // Use container instead of ModLoadingContext
+    container.registerConfig(ModConfig.Type.COMMON, SPEC);
+    
+    // Register the event handlers
+    modEventBus.addListener(Config::onConfigLoad);
+    modEventBus.addListener(Config::onConfigReload);
+}
 
    private static void onConfigLoad(ModConfigEvent.Loading event) {
        updateConfig();
