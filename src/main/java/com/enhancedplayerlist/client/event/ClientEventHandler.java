@@ -1,3 +1,5 @@
+// src/main/java/com/enhancedplayerlist/client/event/ClientEventHandler.java
+
 package com.enhancedplayerlist.client.event;
 
 import com.enhancedplayerlist.Config;
@@ -13,6 +15,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class ClientEventHandler {
     
@@ -29,55 +32,55 @@ public class ClientEventHandler {
             return;
         }
 
+        var player = minecraft.player; // Store player reference to avoid multiple null checks
+        if (player == null || player.connection == null) return;  // Double-check both player and connection
+
         GuiGraphics graphics = event.getGuiGraphics();
         int screenWidth = minecraft.getWindow().getGuiScaledWidth();
         
-        var onlinePlayers = minecraft.player.connection;
-        if (onlinePlayers == null) return;
+        var players = player.connection.getListedOnlinePlayers();
         
-        var players = onlinePlayers.getListedOnlinePlayers();
-
-        // Calculate extra width for stats
-        int extraWidth = 0;
-        for (var playerInfo : players) {
+        // Calculate extra width for stats using AtomicReference
+        final AtomicReference<Integer> extraWidth = new AtomicReference<>(0);
+        players.forEach(playerInfo -> {
             UUID playerId = playerInfo.getProfile().getId();
             List<Component> stats = PlayerListRenderer.getPlayerStats(playerId);
             if (!stats.isEmpty()) {
                 for (Component stat : stats) {
                     int statWidth = minecraft.font.width(stat);
-                    extraWidth = Math.max(extraWidth, statWidth);
+                    extraWidth.set(Math.max(extraWidth.get(), statWidth));
                 }
             }
-        }
+        });
 
         // Add padding
-        extraWidth += 20;
-        lastListWidth = minecraft.font.width("Player") + extraWidth;
+        final int totalExtraWidth = extraWidth.get() + 20;
+        lastListWidth = minecraft.font.width("Player") + totalExtraWidth;
 
-        // Use AtomicInteger for y coordinate to handle lambda effectively final requirement
+        // Use AtomicInteger for y coordinate
         AtomicInteger yPos = new AtomicInteger(10);
 
         // Render player stats
-        for (var playerInfo : players) {
+        players.forEach(playerInfo -> {
             UUID playerId = playerInfo.getProfile().getId();
             List<Component> stats = PlayerListRenderer.getPlayerStats(playerId);
             if (!stats.isEmpty()) {
-                int baseX = screenWidth - extraWidth - 5;
-                int statY = yPos.get();
+                int baseX = screenWidth - totalExtraWidth - 5;
+                AtomicInteger statY = new AtomicInteger(yPos.get());
 
-                for (Component stat : stats) {
+                stats.forEach(stat -> {
                     graphics.drawString(
                         minecraft.font,
                         stat,
                         baseX,
-                        statY,
+                        statY.get(),
                         0xFFFFFF
                     );
-                    statY += 9;
-                }
+                    statY.addAndGet(9);
+                });
             }
             yPos.addAndGet(9);
-        }
+        });
 
         // Handle offline players
         if (Config.showOfflinePlayers) {
@@ -85,27 +88,27 @@ public class ClientEventHandler {
                 if (!statsData.isOnline()) {
                     List<Component> stats = PlayerListRenderer.getPlayerStats(uuid);
                     if (!stats.isEmpty()) {
-                        int baseX = screenWidth - extraWidth - 5;
-                        int statY = yPos.get();
+                        int baseX = screenWidth - totalExtraWidth - 5;
+                        AtomicInteger statY = new AtomicInteger(yPos.get());
 
                         graphics.drawString(
                             minecraft.font,
                             Component.literal(statsData.getPlayerName()),
                             5,
-                            statY,
+                            statY.get(),
                             Config.grayOutOffline ? 0x808080 : 0xFFFFFF
                         );
 
-                        for (Component stat : stats) {
+                        stats.forEach(stat -> {
                             graphics.drawString(
                                 minecraft.font,
                                 stat,
                                 baseX,
-                                statY,
+                                statY.get(),
                                 Config.grayOutOffline ? 0x808080 : 0xFFFFFF
                             );
-                            statY += 9;
-                        }
+                            statY.addAndGet(9);
+                        });
                         yPos.addAndGet(9);
                     }
                 }
