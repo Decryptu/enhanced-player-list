@@ -19,14 +19,14 @@ public class ServerScheduler {
             
             if (!server.getPlayerList().getPlayers().isEmpty()) {
                 server.execute(() -> {
+                    // Save stats for all online players
                     for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                         player.getStats().save();
                     }
                     
-                    server.execute(() -> {
-                        ServerStatsManager.loadAllPlayerStats();
-                        ServerStatsManager.syncToClients();
-                    });
+                    // Load and sync stats in one operation
+                    ServerStatsManager.loadAllPlayerStats();
+                    ServerStatsManager.syncToClients();
                 });
             }
         }

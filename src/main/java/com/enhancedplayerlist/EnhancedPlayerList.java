@@ -12,7 +12,6 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModLoadingContext;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
@@ -27,27 +26,16 @@ public class EnhancedPlayerList {
     public static final String MODID = "enhancedplayerlist";
 
     public EnhancedPlayerList(IEventBus modEventBus) {
-        // Get the mod container
         ModContainer modContainer = ModLoadingContext.get().getActiveContainer();
-
-        // Register config with both bus and container
         Config.register(modEventBus, modContainer);
 
-        // Register mod events
-        modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(NetworkHandler::register);
 
-        // Initialize client event handler only on client side
         if (FMLEnvironment.dist == Dist.CLIENT) {
             ClientEventHandler.init();
         }
 
-        // Register this class for game events
         NeoForge.EVENT_BUS.register(this);
-    }
-
-    private void commonSetup(final FMLCommonSetupEvent event) {
-        // Initialization
     }
 
     @SubscribeEvent
@@ -69,7 +57,7 @@ public class EnhancedPlayerList {
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             MinecraftServer server = player.getServer();
-            if (server != null) {
+            if (server != null) { // Explicit null check
                 server.execute(() -> {
                     player.getStats().save();
                     ServerStatsManager.forceSync();
@@ -84,5 +72,4 @@ public class EnhancedPlayerList {
             ServerStatsManager.onPlayerLeave(player);
         }
     }
-
 }
