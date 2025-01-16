@@ -7,37 +7,52 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.ChatFormatting;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
+import org.slf4j.Logger;
+import com.mojang.logging.LogUtils;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 @OnlyIn(Dist.CLIENT)
 public class PlayerListRenderer {
+    private static final Logger LOGGER = LogUtils.getLogger();
     
     public static Map<String, Component> getPlayerStatsMap(UUID playerId) {
         Map<String, Component> statMap = new HashMap<>();
-        if (playerId == null) return statMap;
+        if (playerId == null) {
+            LOGGER.debug("PlayerListRenderer: playerId is null");
+            return statMap;
+        }
 
         PlayerStatsData stats = ClientStatsManager.getPlayerStats().get(playerId);
-        if (stats == null) return statMap;
+        if (stats == null) {
+            LOGGER.debug("PlayerListRenderer: No stats found for player {}", playerId);
+            return statMap;
+        }
 
-        // Get the raw values first with null checks
+        LOGGER.debug("PlayerListRenderer: Processing stats for player {} with visible stats: {}", 
+                    stats.getPlayerName(), Config.visibleStats);
+        LOGGER.debug("PlayerListRenderer: Raw stats - Playtime: {}, Deaths: {}, Jumps: {}, Damage Dealt: {}, Damage Taken: {}, Blocks Walked: {}", 
+                    stats.getPlayTime(), stats.getDeaths(), stats.getJumps(), 
+                    stats.getDamageDealt(), stats.getDamageTaken(), stats.getBlocksWalked());
+
         for (String stat : Config.visibleStats) {
+            LOGGER.debug("PlayerListRenderer: Processing stat: {}", stat);
             try {
                 Component value = switch (stat.toLowerCase()) {
                     case "playtime" -> {
                         long playTime = stats.getPlayTime();
-                        if (playTime < 0) playTime = 0;
+                        LOGGER.debug("Processing playtime: {}", playTime);
                         yield formatValue(formatTime(playTime));
                     }
                     case "deaths" -> {
                         int deaths = stats.getDeaths();
-                        if (deaths < 0) deaths = 0;
+                        LOGGER.debug("Processing deaths: {}", deaths);
                         yield formatValue(String.valueOf(deaths));
                     }
                     case "distance" -> {
                         long blocks = stats.getBlocksWalked();
-                        if (blocks < 0) blocks = 0;
+                        LOGGER.debug("Processing distance: {}", blocks);
                         double km = blocks / 1000.0;
                         yield formatValue(Config.compactMode ? 
                             String.format("%.1f", km) : 
@@ -45,41 +60,49 @@ public class PlayerListRenderer {
                     }
                     case "jumps" -> {
                         int jumps = stats.getJumps();
-                        if (jumps < 0) jumps = 0;
+                        LOGGER.debug("Processing jumps: {}", jumps);
                         yield formatValue(String.valueOf(jumps));
                     }
                     case "dmgdealt" -> {
                         float damage = stats.getDamageDealt();
-                        if (damage < 0) damage = 0;
+                        LOGGER.debug("Processing damage dealt: {}", damage);
                         yield formatValue(Config.compactMode ? 
                             String.format("%.0f", damage) : 
-                            String.format("%.0f ♥", damage / 2)); // Convert to hearts
+                            String.format("%.0f ♥", damage / 2));
                     }
                     case "dmgtaken" -> {
                         float damage = stats.getDamageTaken();
-                        if (damage < 0) damage = 0;
+                        LOGGER.debug("Processing damage taken: {}", damage);
                         yield formatValue(Config.compactMode ? 
                             String.format("%.0f", damage) : 
-                            String.format("%.0f ♥", damage / 2)); // Convert to hearts
+                            String.format("%.0f ♥", damage / 2));
                     }
-                    case "lastseen" -> stats.isOnline() ? 
-                        Component.literal("Online").withStyle(ChatFormatting.GREEN) : 
-                        formatValue(formatLastSeen(stats.getLastSeen()));
-                    default -> Component.empty();
+                    case "lastseen" -> {
+                        boolean online = stats.isOnline();
+                        LOGGER.debug("Processing last seen (online: {})", online);
+                        yield online ? 
+                            Component.literal("Online").withStyle(ChatFormatting.GREEN) : 
+                            formatValue(formatLastSeen(stats.getLastSeen()));
+                    }
+                    default -> {
+                        LOGGER.debug("Unknown stat type: {}", stat);
+                        yield Component.empty();
+                    }
                 };
 
                 if (value != Component.empty()) {
+                    LOGGER.debug("Adding stat {} with value {}", stat, value.getString());
                     if (!stats.isOnline() && Config.grayOutOffline) {
                         value = value.copy().withStyle(ChatFormatting.GRAY);
                     }
                     statMap.put(stat, value);
                 }
             } catch (Exception e) {
-                // If any stat fails, skip it gracefully
-                continue;
+                LOGGER.error("Error processing stat {}: {}", stat, e.getMessage());
             }
         }
 
+        LOGGER.debug("Final stat map contains keys: {}", statMap.keySet());
         return statMap;
     }
 

@@ -22,7 +22,6 @@ public class PlayerStatsData {
     private float damageDealt;
     private float damageTaken;
 
-    // Split into two composites of 6 parameters each
     private static final StreamCodec<ByteBuf, PlayerStatsData> BASIC_CODEC = StreamCodec.composite(
         ByteBufCodecs.STRING_UTF8, PlayerStatsData::getPlayerName,
         ByteBufCodecs.STRING_UTF8, PlayerStatsData::getUuid,
@@ -87,37 +86,66 @@ public class PlayerStatsData {
     public PlayerStatsData() {}
 
     public void loadFromJson(JsonObject json) {
-        JsonObject customStats = json.getAsJsonObject("stats")
-                                 .getAsJsonObject("minecraft:custom");
-        
-        this.playTime = getStatLong(customStats, "minecraft:play_time", 0L);
-        this.deaths = getStatInt(customStats, "minecraft:deaths", 0);
-        this.timeSinceDeath = getStatLong(customStats, "minecraft:time_since_death", 0L);
-        this.mobKills = getStatInt(customStats, "minecraft:mob_kills", 0);
-        this.blocksWalked = getStatLong(customStats, "minecraft:walk_one_cm", 0L) / 100L;
-        this.jumps = getStatInt(customStats, "minecraft:jump", 0);
-        this.damageDealt = getStatFloat(customStats, "minecraft:damage_dealt", 0f);
-        this.damageTaken = getStatFloat(customStats, "minecraft:damage_taken", 0f);
-        
-        JsonObject minedStats = json.getAsJsonObject("stats")
-                                .getAsJsonObject("minecraft:mined");
-        if (minedStats != null) {
-            this.blocksMined = minedStats.entrySet().stream()
-                    .mapToLong(entry -> entry.getValue().getAsLong())
-                    .sum();
+        try {
+            JsonObject stats = json.getAsJsonObject("stats");
+            if (stats == null) return;
+
+            JsonObject customStats = stats.getAsJsonObject("minecraft:custom");
+            if (customStats == null) return;
+
+            // Load stats with proper path checks
+            this.playTime = getStatLong(customStats, "minecraft:play_time", 0L);
+            this.deaths = getStatInt(customStats, "minecraft:deaths", 0);
+            this.timeSinceDeath = getStatLong(customStats, "minecraft:time_since_death", 0L);
+            this.mobKills = getStatInt(customStats, "minecraft:mob_kills", 0);
+            this.blocksWalked = getStatLong(customStats, "minecraft:walk_one_cm", 0L) + 
+                               getStatLong(customStats, "minecraft:sprint_one_cm", 0L) +
+                               getStatLong(customStats, "minecraft:walk_on_water_one_cm", 0L) +
+                               getStatLong(customStats, "minecraft:walk_under_water_one_cm", 0L);
+            this.jumps = getStatInt(customStats, "minecraft:jump", 0);
+            this.damageDealt = getStatFloat(customStats, "minecraft:damage_dealt", 0f);
+            this.damageTaken = getStatFloat(customStats, "minecraft:damage_taken", 0f);
+            
+            // For blocks mined, we sum up everything in minecraft:mined
+            JsonObject minedStats = stats.getAsJsonObject("minecraft:mined");
+            if (minedStats != null) {
+                this.blocksMined = minedStats.entrySet().stream()
+                        .mapToLong(entry -> {
+                            try {
+                                return entry.getValue().getAsLong();
+                            } catch (Exception e) {
+                                return 0L;
+                            }
+                        })
+                        .sum();
+            }
+        } catch (Exception e) {
+            System.err.println("Error loading player stats: " + e.getMessage());
         }
     }
   
     private long getStatLong(JsonObject json, String key, long defaultValue) {
-        return json != null && json.has(key) ? json.get(key).getAsLong() : defaultValue;
+        try {
+            return json.has(key) ? json.get(key).getAsLong() : defaultValue;
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 
     private int getStatInt(JsonObject json, String key, int defaultValue) {
-        return json != null && json.has(key) ? json.get(key).getAsInt() : defaultValue;
+        try {
+            return json.has(key) ? json.get(key).getAsInt() : defaultValue;
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 
     private float getStatFloat(JsonObject json, String key, float defaultValue) {
-        return json != null && json.has(key) ? json.get(key).getAsFloat() : defaultValue;
+        try {
+            return json.has(key) ? json.get(key).getAsFloat() : defaultValue;
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 
     public String getPlayerName() { return playerName != null ? playerName : ""; }
