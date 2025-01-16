@@ -33,21 +33,22 @@ public class ServerStatsManager {
     private static void cleanupOldPlayers() {
         if (!Config.showOfflinePlayers) {
             long now = System.currentTimeMillis();
-            playerStats.values().removeIf(stats -> 
-                !stats.isOnline() && 
-                (now - stats.getLastSeen() > CLEANUP_THRESHOLD.toMillis())
-            );
+            playerStats.values().removeIf(stats -> !stats.isOnline() &&
+                    (now - stats.getLastSeen() > CLEANUP_THRESHOLD.toMillis()));
         }
     }
 
     public static void loadAllPlayerStats() {
-        if (server == null) return;
+        if (server == null)
+            return;
 
         File statsDir = server.getWorldPath(LevelResource.PLAYER_STATS_DIR).toFile();
-        if (!statsDir.exists() || !statsDir.isDirectory()) return;
+        if (!statsDir.exists() || !statsDir.isDirectory())
+            return;
 
         File[] statFiles = statsDir.listFiles((dir, name) -> name.endsWith(".json"));
-        if (statFiles == null) return;
+        if (statFiles == null)
+            return;
 
         boolean dataUpdated = false;
         Set<UUID> processedUuids = new HashSet<>();
@@ -64,11 +65,19 @@ public class ServerStatsManager {
                 newData.setUuid(uuidStr);
                 newData.loadFromJson(jsonStats);
 
+                // Get the file's last modified time
+                long lastModified = statFile.lastModified();
+                newData.setLastSeen(lastModified);
+
                 // Preserve online status and player name if exists
                 if (oldData != null) {
                     newData.setOnline(oldData.isOnline());
                     if (!oldData.getPlayerName().isEmpty()) {
                         newData.setPlayerName(oldData.getPlayerName());
+                    }
+                    // Only update lastSeen if player is offline
+                    if (!oldData.isOnline()) {
+                        newData.setLastSeen(lastModified);
                     }
                 }
 
@@ -77,6 +86,8 @@ public class ServerStatsManager {
                 if (player != null) {
                     newData.setOnline(true);
                     newData.setPlayerName(player.getGameProfile().getName());
+                    // For online players, lastSeen should be current time
+                    newData.setLastSeen(System.currentTimeMillis());
                 } else if (newData.getPlayerName().isEmpty()) {
                     // Only use profile cache for offline players with no name
                     Optional.ofNullable(server.getProfileCache())
@@ -103,11 +114,12 @@ public class ServerStatsManager {
     }
 
     public static void syncToClients() {
-        if (server == null) return;
+        if (server == null)
+            return;
 
         Map<UUID, PlayerStatsData> visibleStats = playerStats.entrySet().stream()
-            .filter(e -> e.getValue().isOnline() || Config.showOfflinePlayers)
-            .collect(HashMap::new, (m, e) -> m.put(e.getKey(), e.getValue()), HashMap::putAll);
+                .filter(e -> e.getValue().isOnline() || Config.showOfflinePlayers)
+                .collect(HashMap::new, (m, e) -> m.put(e.getKey(), e.getValue()), HashMap::putAll);
 
         if (!visibleStats.isEmpty()) {
             PlayerStatsPacket packet = new PlayerStatsPacket(visibleStats);
