@@ -1,9 +1,9 @@
 // src/main/java/com/enhancedplayerlist/server/ServerScheduler.java
-
 package com.enhancedplayerlist.server;
 
 import com.enhancedplayerlist.Config;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.fml.LogicalSide;
 import net.neoforged.fml.util.thread.EffectiveSide;
 
@@ -16,8 +16,19 @@ public class ServerScheduler {
         tickCounter++;
         if (tickCounter >= Config.updateFrequency) {
             tickCounter = 0;
-            ServerStatsManager.loadAllPlayerStats();
-            ServerStatsManager.syncToClients();
+            
+            if (!server.getPlayerList().getPlayers().isEmpty()) {
+                server.execute(() -> {
+                    for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                        player.getStats().save();
+                    }
+                    
+                    server.execute(() -> {
+                        ServerStatsManager.loadAllPlayerStats();
+                        ServerStatsManager.syncToClients();
+                    });
+                });
+            }
         }
     }
 }

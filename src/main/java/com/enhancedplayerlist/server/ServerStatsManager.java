@@ -27,39 +27,54 @@ public class ServerStatsManager {
     }
 
     public static void loadAllPlayerStats() {
-        if (server == null) return;
+        if (server == null)
+            return;
 
         File statsDir = server.getWorldPath(LevelResource.PLAYER_STATS_DIR).toFile();
-        if (!statsDir.exists()) return;
+        if (!statsDir.exists())
+            return;
 
         File[] statFiles = statsDir.listFiles((dir, name) -> name.endsWith(".json"));
-        if (statFiles == null) return;
+        if (statFiles == null)
+            return;
+
+        boolean dataUpdated = false;
+
+        // Clear existing data to prevent duplicates
+        playerStats.clear();
 
         for (File statFile : statFiles) {
             try {
                 String uuid = statFile.getName().replace(".json", "");
                 JsonObject jsonStats = GSON.fromJson(new FileReader(statFile), JsonObject.class);
 
-                PlayerStatsData statsData = new PlayerStatsData();
-                statsData.setUuid(uuid);
-                statsData.loadFromJson(jsonStats);
+                PlayerStatsData newData = new PlayerStatsData();
+                newData.setUuid(uuid);
+                newData.loadFromJson(jsonStats);
 
+                // Check if player is currently online
                 ServerPlayer player = server.getPlayerList().getPlayer(UUID.fromString(uuid));
-                statsData.setOnline(player != null);
-                
-                // Use file's last modified time for offline players
-                if (!statsData.isOnline()) {
-                    statsData.setLastSeen(statFile.lastModified());
+                newData.setOnline(player != null);
+
+                if (player != null) {
+                    newData.setPlayerName(player.getGameProfile().getName());
+                } else {
+                    // Only use profile cache for offline players
+                    Optional.ofNullable(server.getProfileCache())
+                            .flatMap(cache -> cache.get(UUID.fromString(uuid)))
+                            .ifPresent(profile -> newData.setPlayerName(profile.getName()));
                 }
 
-                Optional.ofNullable(server.getProfileCache())
-                        .flatMap(cache -> cache.get(UUID.fromString(uuid)))
-                        .ifPresent(profile -> statsData.setPlayerName(profile.getName()));
+                playerStats.put(UUID.fromString(uuid), newData);
+                dataUpdated = true;
 
-                playerStats.put(UUID.fromString(uuid), statsData);
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        }
+
+        if (dataUpdated) {
+            syncToClients();
         }
     }
 
@@ -74,8 +89,17 @@ public class ServerStatsManager {
             }
         });
 
-        PlayerStatsPacket packet = new PlayerStatsPacket(visibleStats);
-        NetworkHandler.sendToAllPlayers(packet); // Use the helper method we defined
+        if (!visibleStats.isEmpty()) {
+            PlayerStatsPacket packet = new PlayerStatsPacket(visibleStats);
+            NetworkHandler.sendToAllPlayers(packet);
+        }
+    }
+
+    public static void forceSync() {
+        if (server != null) {
+            loadAllPlayerStats();
+            syncToClients();
+        }
     }
 
     public static void onPlayerJoin(Player player) {
