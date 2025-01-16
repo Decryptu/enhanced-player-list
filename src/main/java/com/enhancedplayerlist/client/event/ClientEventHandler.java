@@ -1,10 +1,10 @@
-
 // src/main/java/com/enhancedplayerlist/client/event/ClientEventHandler.java
 package com.enhancedplayerlist.client.event;
 
 import com.enhancedplayerlist.Config;
 import com.enhancedplayerlist.client.PlayerListRenderer;
 import com.enhancedplayerlist.client.ClientStatsManager;
+import com.enhancedplayerlist.data.PlayerStatsData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -13,20 +13,15 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.*;
 
 public class ClientEventHandler {
     private static final Minecraft minecraft = Minecraft.getInstance();
-    private static int lastListWidth = 0;
     private static final int ROW_HEIGHT = 9;
-    private static final int HEADER_HEIGHT = ROW_HEIGHT + 1;
-    private static final int START_Y = HEADER_HEIGHT + 5;
+    private static final int STAT_SPACING = 8;
+    private static final int NAME_COLUMN_WIDTH = 100; // Fixed width for names
+    private static final int PADDING = 5;
+    private static final int BACKGROUND_COLOR = 0x80000000;
 
     public static void init() {
         NeoForge.EVENT_BUS.register(ClientEventHandler.class);
@@ -43,129 +38,138 @@ public class ClientEventHandler {
 
         GuiGraphics graphics = event.getGuiGraphics();
         int screenWidth = minecraft.getWindow().getGuiScaledWidth();
+        int screenHeight = minecraft.getWindow().getGuiScaledHeight();
         
-        Collection<PlayerInfo> players = player.connection.getListedOnlinePlayers();
-        if (players.isEmpty() && !Config.showOfflinePlayers) return;
+        // Get all players (online and offline)
+        Collection<PlayerInfo> onlinePlayers = player.connection.getListedOnlinePlayers();
+        List<PlayerStatsData> allPlayers = new ArrayList<>();
+        
+        // Add online players
+        for (PlayerInfo info : onlinePlayers) {
+            UUID playerId = info.getProfile().getId();
+            PlayerStatsData data = ClientStatsManager.getPlayerStats().get(playerId);
+            if (data != null) allPlayers.add(data);
+        }
+        
+        // Add offline players if enabled
+        if (Config.showOfflinePlayers) {
+            ClientStatsManager.getPlayerStats().values().stream()
+                .filter(data -> !data.isOnline())
+                .forEach(allPlayers::add);
+        }
 
+        if (allPlayers.isEmpty()) return;
+
+        // Calculate dimensions
         List<String> statColumns = new ArrayList<>(Config.visibleStats);
+        Map<String, Integer> columnWidths = calculateColumnWidths(allPlayers, statColumns);
+        
+        int totalStatsWidth = calculateTotalWidth(columnWidths);
+        int totalWidth = NAME_COLUMN_WIDTH + totalStatsWidth + (PADDING * 3);
+        
+        // Center everything
+        int startX = (screenWidth - totalWidth) / 2;
+        int backgroundY = screenHeight / 4;
+        
+        // Calculate proper background height including all players
+        int playerCount = allPlayers.size();
+        int backgroundHeight = (playerCount + 1) * ROW_HEIGHT + (PADDING * 2);
+        
+        // Draw main background
+        graphics.fill(startX, backgroundY, startX + totalWidth, backgroundY + backgroundHeight, BACKGROUND_COLOR);
+
+        // Draw headers
+        int headerY = backgroundY + PADDING;
+        
+        // Draw "Players" header
+        graphics.drawString(
+            minecraft.font,
+            "Players",
+            startX + PADDING,
+            headerY,
+            0xFFFFFF
+        );
+
+        // Draw stat headers
+        int statHeaderX = startX + NAME_COLUMN_WIDTH + (PADDING * 2);
+        for (String stat : statColumns) {
+            graphics.drawString(
+                minecraft.font,
+                formatStatHeader(stat),
+                statHeaderX,
+                headerY,
+                0xFFFFFF
+            );
+            statHeaderX += columnWidths.get(stat) + STAT_SPACING;
+        }
+
+        // Draw player rows
+        int rowY = headerY + ROW_HEIGHT + PADDING;
+        for (PlayerStatsData playerData : allPlayers) {
+            // Draw player name
+            int nameColor = playerData.isOnline() ? 0xFFFFFF : (Config.grayOutOffline ? 0x808080 : 0xFFFFFF);
+            graphics.drawString(
+                minecraft.font,
+                playerData.getPlayerName(),
+                startX + PADDING,
+                rowY,
+                nameColor
+            );
+
+            // Draw stats
+            int statX = startX + NAME_COLUMN_WIDTH + (PADDING * 2);
+            Map<String, Component> stats = PlayerListRenderer.getPlayerStatsMap(UUID.fromString(playerData.getUuid()));
+            
+            for (String stat : statColumns) {
+                Component value = stats.get(stat);
+                if (value != null) {
+                    graphics.drawString(
+                        minecraft.font,
+                        value,
+                        statX,
+                        rowY,
+                        nameColor
+                    );
+                    statX += columnWidths.get(stat) + STAT_SPACING;
+                }
+            }
+            rowY += ROW_HEIGHT;
+        }
+    }
+
+    private static Map<String, Integer> calculateColumnWidths(Collection<PlayerStatsData> players, List<String> statColumns) {
         Map<String, Integer> columnWidths = new HashMap<>();
         
-        // Calculate column widths
+        // Initialize with header widths
         for (String stat : statColumns) {
             Component header = Component.literal(formatStatHeader(stat));
             columnWidths.put(stat, minecraft.font.width(header));
         }
 
-        // Calculate widths from online players
-        players.forEach(playerInfo -> {
-            UUID playerId = playerInfo.getProfile().getId();
-            Map<String, Component> stats = PlayerListRenderer.getPlayerStatsMap(playerId);
+        // Calculate widths from player stats
+        for (PlayerStatsData playerData : players) {
+            Map<String, Component> stats = PlayerListRenderer.getPlayerStatsMap(UUID.fromString(playerData.getUuid()));
             
             for (String stat : statColumns) {
                 Component value = stats.get(stat);
                 if (value != null) {
-                    columnWidths.put(stat, Math.max(columnWidths.get(stat), minecraft.font.width(value)));
-                }
-            }
-        });
-
-        // Draw column headers
-        AtomicInteger xPos = new AtomicInteger(screenWidth - 5);
-        for (int i = statColumns.size() - 1; i >= 0; i--) {
-            String stat = statColumns.get(i);
-            int width = columnWidths.get(stat);
-            xPos.set(xPos.get() - width - 10);
-            
-            graphics.drawString(
-                minecraft.font,
-                formatStatHeader(stat),
-                xPos.get(),
-                5, // Move headers up
-                0xFFFFFF
-            );
-        }
-
-        AtomicInteger yPos = new AtomicInteger(START_Y);
-
-        // Draw values for online players
-        players.forEach(playerInfo -> {
-            UUID playerId = playerInfo.getProfile().getId();
-            Map<String, Component> stats = PlayerListRenderer.getPlayerStatsMap(playerId);
-            
-            // Draw player name
-            graphics.drawString(
-                minecraft.font,
-                playerInfo.getProfile().getName(),
-                5,
-                yPos.get(),
-                0xFFFFFF
-            );
-            
-            // Draw stats
-            xPos.set(screenWidth - 5);
-            for (int i = statColumns.size() - 1; i >= 0; i--) {
-                String stat = statColumns.get(i);
-                Component value = stats.get(stat);
-                int width = columnWidths.get(stat);
-                xPos.set(xPos.get() - width - 10);
-                
-                if (value != null) {
-                    graphics.drawString(
-                        minecraft.font,
-                        value,
-                        xPos.get(),
-                        yPos.get(),
-                        0xFFFFFF
+                    columnWidths.put(stat, 
+                        Math.max(columnWidths.get(stat), minecraft.font.width(value))
                     );
                 }
             }
-            yPos.addAndGet(ROW_HEIGHT);
-        });
-
-        // Handle offline players
-        if (Config.showOfflinePlayers) {
-            ClientStatsManager.getPlayerStats().forEach((uuid, statsData) -> {
-                if (!statsData.isOnline()) {
-                    Map<String, Component> stats = PlayerListRenderer.getPlayerStatsMap(uuid);
-                    
-                    // Draw offline player name
-                    graphics.drawString(
-                        minecraft.font,
-                        Component.literal(statsData.getPlayerName()),
-                        5,
-                        yPos.get(),
-                        Config.grayOutOffline ? 0x808080 : 0xFFFFFF
-                    );
-                    
-                    xPos.set(screenWidth - 5);
-                    for (int i = statColumns.size() - 1; i >= 0; i--) {
-                        String stat = statColumns.get(i);
-                        Component value = stats.get(stat);
-                        int width = columnWidths.get(stat);
-                        xPos.set(xPos.get() - width - 10);
-                        
-                        if (value != null) {
-                            graphics.drawString(
-                                minecraft.font,
-                                value,
-                                xPos.get(),
-                                yPos.get(),
-                                Config.grayOutOffline ? 0x808080 : 0xFFFFFF
-                            );
-                        }
-                    }
-                    yPos.addAndGet(ROW_HEIGHT);
-                }
-            });
         }
+
+        return columnWidths;
+    }
+
+    private static int calculateTotalWidth(Map<String, Integer> columnWidths) {
+        return columnWidths.values().stream().mapToInt(Integer::intValue).sum() 
+               + (columnWidths.size() * STAT_SPACING);
     }
 
     private static String formatStatHeader(String stat) {
         return Config.compactMode ? stat.substring(0, Math.min(3, stat.length())).toUpperCase() 
                                 : stat.substring(0, 1).toUpperCase() + stat.substring(1);
-    }
-
-    public static int getLastListWidth() {
-        return lastListWidth;
     }
 }

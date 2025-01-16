@@ -21,28 +21,27 @@ public class Config {
            .comment("Whether to gray out offline players in the player list")
            .define("grayOutOffline", true);
 
-private static final ModConfigSpec.ConfigValue<List<? extends String>> VISIBLE_STATS = BUILDER
+   private static final ModConfigSpec.ConfigValue<List<? extends String>> VISIBLE_STATS = BUILDER
        .comment("Stats to display in the player list",
                "Available stats:",
                "playtime - Total play time",
                "deaths - Number of deaths",
-               "lastDeath - Time since last death", 
-               "mobKills - Total mob kills",
-               "playerKills - Player kills",
-               "blocksWalked - Blocks walked", 
-               "blocksMined - Blocks mined",
+               "distance - Distance walked (km)",
                "jumps - Jump count",
-               "damageDealt - Damage dealt",
-               "damageTaken - Damage taken")
+               "dmgDealt - Damage dealt",
+               "dmgTaken - Damage taken",
+               "lastSeen - Time since last seen")
        .defineList("visibleStats",
            Arrays.asList(
                "playtime",
-               "deaths", 
-               "lastDeath",
-               "mobKills",
-               "blocksWalked"
+               "deaths",
+               "distance",
+               "jumps",
+               "dmgDealt",
+               "dmgTaken",
+               "lastSeen"
            ),
-           () -> "playtime", // Supplier for new elements
+           () -> "playtime",
            entry -> entry instanceof String && isValidStat((String) entry));
 
    private static final ModConfigSpec.IntValue UPDATE_FREQUENCY = BUILDER
@@ -65,26 +64,21 @@ private static final ModConfigSpec.ConfigValue<List<? extends String>> VISIBLE_S
    private static boolean isValidStat(String stat) {
        return Arrays.asList(
                "playtime",
-               "deaths", 
-               "lastDeath",
-               "mobKills",
-               "playerKills",
-               "blocksWalked",
-               "blocksMined",
+               "deaths",
+               "distance",
                "jumps",
-               "damageDealt",
-               "damageTaken"
+               "dmgDealt",
+               "dmgTaken",
+               "lastSeen"
        ).contains(stat);
    }
 
-public static void register(IEventBus modEventBus, ModContainer container) { // Change method signature
-    // Use container instead of ModLoadingContext
-    container.registerConfig(ModConfig.Type.COMMON, SPEC);
-    
-    // Register the event handlers
-    modEventBus.addListener(Config::onConfigLoad);
-    modEventBus.addListener(Config::onConfigReload);
-}
+   public static void register(IEventBus modEventBus, ModContainer container) {
+       container.registerConfig(ModConfig.Type.COMMON, SPEC);
+       
+       modEventBus.addListener(Config::onConfigLoad);
+       modEventBus.addListener(Config::onConfigReload);
+   }
 
    private static void onConfigLoad(ModConfigEvent.Loading event) {
        updateConfig();
