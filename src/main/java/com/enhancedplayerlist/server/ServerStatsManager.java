@@ -27,16 +27,13 @@ public class ServerStatsManager {
     }
 
     public static void loadAllPlayerStats() {
-        if (server == null)
-            return;
+        if (server == null) return;
 
         File statsDir = server.getWorldPath(LevelResource.PLAYER_STATS_DIR).toFile();
-        if (!statsDir.exists())
-            return;
+        if (!statsDir.exists()) return;
 
         File[] statFiles = statsDir.listFiles((dir, name) -> name.endsWith(".json"));
-        if (statFiles == null)
-            return;
+        if (statFiles == null) return;
 
         for (File statFile : statFiles) {
             try {
@@ -49,6 +46,11 @@ public class ServerStatsManager {
 
                 ServerPlayer player = server.getPlayerList().getPlayer(UUID.fromString(uuid));
                 statsData.setOnline(player != null);
+                
+                // Use file's last modified time for offline players
+                if (!statsData.isOnline()) {
+                    statsData.setLastSeen(statFile.lastModified());
+                }
 
                 Optional.ofNullable(server.getProfileCache())
                         .flatMap(cache -> cache.get(UUID.fromString(uuid)))
