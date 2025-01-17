@@ -23,45 +23,118 @@ public class PlayerStatsData {
     private float damageDealt;
     private float damageTaken;
 
-    // Codec is limited to 6 parameters at a time so we split them
+    private PlayerStatsData() {}
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private final PlayerStatsData data = new PlayerStatsData();
+
+        public Builder playerName(String playerName) {
+            data.playerName = playerName != null ? playerName : "";
+            return this;
+        }
+
+        public Builder uuid(String uuid) {
+            data.uuid = uuid != null ? uuid : "";
+            return this;
+        }
+
+        public Builder online(boolean online) {
+            data.isOnline = online;
+            if (!online) {
+                data.lastSeen = System.currentTimeMillis();
+            }
+            return this;
+        }
+
+        public Builder lastSeen(long lastSeen) {
+            data.lastSeen = lastSeen;
+            return this;
+        }
+
+        public Builder playTime(long playTime) {
+            data.playTime = playTime;
+            return this;
+        }
+
+        public Builder deaths(int deaths) {
+            data.deaths = deaths;
+            return this;
+        }
+
+        public Builder timeSinceDeath(long timeSinceDeath) {
+            data.timeSinceDeath = timeSinceDeath;
+            return this;
+        }
+
+        public Builder mobKills(int mobKills) {
+            data.mobKills = mobKills;
+            return this;
+        }
+
+        public Builder blocksWalked(long blocksWalked) {
+            data.blocksWalked = blocksWalked;
+            return this;
+        }
+
+        public Builder blocksMined(long blocksMined) {
+            data.blocksMined = blocksMined;
+            return this;
+        }
+
+        public Builder jumps(int jumps) {
+            data.jumps = jumps;
+            return this;
+        }
+
+        public Builder damageDealt(float damageDealt) {
+            data.damageDealt = damageDealt;
+            return this;
+        }
+
+        public Builder damageTaken(float damageTaken) {
+            data.damageTaken = damageTaken;
+            return this;
+        }
+
+        public PlayerStatsData build() {
+            return data;
+        }
+    }
+
+    // Split codecs for network optimization
     private static final StreamCodec<ByteBuf, PlayerStatsData> BASIC_DATA_CODEC = StreamCodec.composite(
             ByteBufCodecs.STRING_UTF8, PlayerStatsData::getPlayerName,
             ByteBufCodecs.STRING_UTF8, PlayerStatsData::getUuid,
             ByteBufCodecs.BOOL, PlayerStatsData::isOnline,
-            // Create basic data
-            (name, uuid, online) -> {
-                PlayerStatsData data = new PlayerStatsData();
-                data.setPlayerName(name);
-                data.setUuid(uuid);
-                data.setOnline(online);
-                return data;
-            });
+            (name, uuid, online) -> builder()
+                    .playerName(name)
+                    .uuid(uuid)
+                    .online(online)
+                    .build());
 
     private static final StreamCodec<ByteBuf, PlayerStatsData> STATS_DATA_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_LONG, PlayerStatsData::getPlayTime,
             ByteBufCodecs.VAR_INT, PlayerStatsData::getDeaths,
             ByteBufCodecs.VAR_LONG, PlayerStatsData::getTimeSinceDeath,
-            // Create stats data
-            (playTime, deaths, timeSinceDeath) -> {
-                PlayerStatsData data = new PlayerStatsData();
-                data.playTime = playTime;
-                data.deaths = deaths;
-                data.timeSinceDeath = timeSinceDeath;
-                return data;
-            });
+            (playTime, deaths, timeSinceDeath) -> builder()
+                    .playTime(playTime)
+                    .deaths(deaths)
+                    .timeSinceDeath(timeSinceDeath)
+                    .build());
 
     private static final StreamCodec<ByteBuf, PlayerStatsData> EXTENDED_STATS_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_INT, PlayerStatsData::getJumps,
             ByteBufCodecs.VAR_LONG, PlayerStatsData::getBlocksWalked,
             ByteBufCodecs.FLOAT, PlayerStatsData::getDamageDealt,
-            // Create extended stats data
-            (jumps, blocksWalked, damageDealt) -> {
-                PlayerStatsData data = new PlayerStatsData();
-                data.jumps = jumps;
-                data.blocksWalked = blocksWalked;
-                data.damageDealt = damageDealt;
-                return data;
-            });
+            (jumps, blocksWalked, damageDealt) -> builder()
+                    .jumps(jumps)
+                    .blocksWalked(blocksWalked)
+                    .damageDealt(damageDealt)
+                    .build());
 
     public static final StreamCodec<ByteBuf, PlayerStatsData> STREAM_CODEC = new StreamCodec<>() {
         @Override
@@ -77,40 +150,41 @@ public class PlayerStatsData {
         @Override
         @Nonnull
         public PlayerStatsData decode(@Nonnull ByteBuf buf) {
-            PlayerStatsData result = new PlayerStatsData();
+            Builder builder = builder();
 
+            // Decode basic data
             PlayerStatsData basic = BASIC_DATA_CODEC.decode(buf);
-            result.setPlayerName(basic.getPlayerName());
-            result.setUuid(basic.getUuid());
-            result.setOnline(basic.isOnline());
+            builder.playerName(basic.getPlayerName())
+                   .uuid(basic.getUuid())
+                   .online(basic.isOnline());
 
+            // Decode stats data
             PlayerStatsData stats = STATS_DATA_CODEC.decode(buf);
-            result.playTime = stats.getPlayTime();
-            result.deaths = stats.getDeaths();
-            result.timeSinceDeath = stats.getTimeSinceDeath();
+            builder.playTime(stats.getPlayTime())
+                   .deaths(stats.getDeaths())
+                   .timeSinceDeath(stats.getTimeSinceDeath());
 
+            // Decode extended stats
             PlayerStatsData extended = EXTENDED_STATS_CODEC.decode(buf);
-            result.jumps = extended.getJumps();
-            result.blocksWalked = extended.getBlocksWalked();
-            result.damageDealt = extended.getDamageDealt();
+            builder.jumps(extended.getJumps())
+                   .blocksWalked(extended.getBlocksWalked())
+                   .damageDealt(extended.getDamageDealt());
 
-            result.lastSeen = ByteBufCodecs.VAR_LONG.decode(buf);
-            result.blocksMined = ByteBufCodecs.VAR_LONG.decode(buf);
-            result.damageTaken = ByteBufCodecs.FLOAT.decode(buf);
-
-            return result;
+            // Decode remaining fields
+            return builder.lastSeen(ByteBufCodecs.VAR_LONG.decode(buf))
+                         .blocksMined(ByteBufCodecs.VAR_LONG.decode(buf))
+                         .damageTaken(ByteBufCodecs.FLOAT.decode(buf))
+                         .build();
         }
     };
 
     public void loadFromJson(JsonObject json) {
         try {
             JsonObject stats = json.getAsJsonObject("stats");
-            if (stats == null)
-                return;
+            if (stats == null) return;
 
             JsonObject customStats = stats.getAsJsonObject("minecraft:custom");
-            if (customStats == null)
-                return;
+            if (customStats == null) return;
 
             this.playTime = getStatLong(customStats, "minecraft:play_time", 0L);
             this.deaths = getStatInt(customStats, "minecraft:deaths", 0);
@@ -159,85 +233,47 @@ public class PlayerStatsData {
         }
     }
 
+    // Getters
     @Nonnull
-    public String getPlayerName() {
-        return playerName;
-    }
+    public String getPlayerName() { return playerName; }
+    @Nonnull
+    public String getUuid() { return uuid; }
+    public boolean isOnline() { return isOnline; }
+    public long getLastSeen() { return lastSeen; }
+    public long getPlayTime() { return playTime; }
+    public int getDeaths() { return deaths; }
+    public long getTimeSinceDeath() { return timeSinceDeath; }
+    public int getMobKills() { return mobKills; }
+    public long getBlocksWalked() { return blocksWalked; }
+    public long getBlocksMined() { return blocksMined; }
+    public int getJumps() { return jumps; }
+    public float getDamageDealt() { return damageDealt; }
+    public float getDamageTaken() { return damageTaken; }
 
+    // Minimal setters needed for backwards compatibility
     public void setPlayerName(String playerName) {
         this.playerName = playerName != null ? playerName : "";
-    }
-
-    @Nonnull
-    public String getUuid() {
-        return uuid;
     }
 
     public void setUuid(String uuid) {
         this.uuid = uuid != null ? uuid : "";
     }
 
-    public boolean isOnline() {
-        return isOnline;
-    }
-
     public void setOnline(boolean online) {
-        isOnline = online;
+        this.isOnline = online;
         if (!online) {
-            lastSeen = System.currentTimeMillis();
+            this.lastSeen = System.currentTimeMillis();
         }
-    }
-
-    public long getLastSeen() {
-        return lastSeen;
     }
 
     public void setLastSeen(long lastSeen) {
         this.lastSeen = lastSeen;
     }
 
-    public long getPlayTime() {
-        return playTime;
-    }
-
-    public int getDeaths() {
-        return deaths;
-    }
-
-    public long getTimeSinceDeath() {
-        return timeSinceDeath;
-    }
-
-    public int getMobKills() {
-        return mobKills;
-    }
-
-    public long getBlocksWalked() {
-        return blocksWalked;
-    }
-
-    public long getBlocksMined() {
-        return blocksMined;
-    }
-
-    public int getJumps() {
-        return jumps;
-    }
-
-    public float getDamageDealt() {
-        return damageDealt;
-    }
-
-    public float getDamageTaken() {
-        return damageTaken;
-    }
-
     @Override
     public boolean equals(Object o) {
-        if (this == o)
-            return true;
-        if (!(o instanceof PlayerStatsData that))
-            return false;
+        if (this == o) return true;
+        if (!(o instanceof PlayerStatsData that)) return false;
 
         return playTime == that.playTime &&
                 deaths == that.deaths &&
